@@ -1,0 +1,108 @@
+#!/usr/bin/python
+
+import sys
+import json
+from enum import Enum
+
+
+
+class CommandManager(object):
+
+    return_code = Enum('ReturnValues',['EXIT', 'HELP'])
+
+    def __init__(self):
+        self._commands = {}
+
+    def register(self, command):
+        self._commands[str(command)] = command
+
+    def execute(self, command_string):
+        if len(command_string)==0:
+            return
+        command, _, command_params = command_string.partition(' ')
+        if not command.lower() in self._commands:
+            print("Command '{command}' not supported".format(command=command))
+        else:
+            return self._commands[command.lower()](command_params)
+
+    def print_commands(self):
+        print("These are the available commands:")
+        for command_object in self._commands.values():
+            print('\t' + command_object.desc)
+
+    def shutdown(self):
+        for command in self._commands.values():
+            command.shutdown()
+        sys.exit(0)
+
+
+class Command(object):
+    '''
+    Simple base class to give some defaults in case the inherited classes don't
+    so we don't need to handle exceptions.
+    '''
+    def __init__(self, command_str):
+        self._command = command_str
+        self.desc = "Default description"
+    def __str__(self):
+        return self._command
+    def shutdown(self):
+        pass
+
+
+class SendShaCommand(Command):
+    def __init__(self, command_str):
+        super().__init__(command_str)
+        self._scan_id = 1
+        self.desc = command_str + " <sha1> - send the parameter <sha1> to the input queue for scanning"
+
+    def __call__(self, sha):
+        payload = {'sha1': sha, 'scan_id': self._scan_id}
+        self._scan_id += 1
+        print("Sending payload {payload}".format(command=self._command,
+                                                 payload=payload))
+
+
+
+class ReceiveCommand(Command):
+    def __init__(self, command_str):
+        super().__init__(command_str)
+        self.desc = command_str + " - receives one message from the output queue"
+
+    def __call__(self, param):
+        print("Message received: {message}".format(message=message.content if message else 'None'))
+
+
+class ExitCommand(Command):
+    def __init__(self, command_str):
+        super(ExitCommand, self).__init__(command_str)
+        self.desc = command_str + " - exits this runner program"
+
+    def __call__(self, *args, **kwargs):
+        return CommandManager.return_code.EXIT
+
+
+class HelpCommand(Command):
+    def __init__(self, command_str):
+        super(HelpCommand, self).__init__(command_str)
+        self.desc = command_str + " - displays helpful text"
+
+    def __call__(self, *args, **kwargs):
+        return CommandManager.return_code.HELP
+
+
+cm = CommandManager()
+cm.register(SendShaCommand('send'))
+cm.register(ReceiveCommand('receive'))
+cm.register(ExitCommand('exit'))
+cm.register(HelpCommand('help'))
+
+cm.print_commands()
+
+while True:
+    command = input("Please enter command: ")
+    return_value=cm.execute(command)
+    if CommandManager.return_code.EXIT==return_value:
+        cm.shutdown()
+    elif CommandManager.return_code.HELP==return_value:
+        cm.print_commands()
